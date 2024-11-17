@@ -4,7 +4,7 @@ from spikingjelly.clock_driven.neuron import (
     MultiStepLIFNode,
     MultiStepParametricLIFNode,
 )
-
+from model.TIM import TIM
 
 class Erode(nn.Module):
     def __init__(self) -> None:
@@ -91,11 +91,16 @@ class MS_SSA_Conv(nn.Module):
         spike_mode="lif",
         dvs=False,
         layer=0,
+
+        TIM_alpha=0.5 # 引入TIM参数
     ):
         super().__init__()
         assert (
             dim % num_heads == 0
         ), f"dim {dim} should be divided by num_heads {num_heads}."
+
+        self.TIM = TIM(dim=dim,in_channels=dim, TIM_alpha=TIM_alpha) # 引入TIM方法
+
         self.dim = dim
         self.dvs = dvs
         self.num_heads = num_heads
@@ -173,13 +178,26 @@ class MS_SSA_Conv(nn.Module):
         if hook is not None:
             hook[self._get_name() + str(self.layer) + "_first_lif"] = x.detach()
 
-        x_for_qkv = x.flatten(0, 1)
+        x_for_qkv = x.flatten(0, 1)  # 将 T 和 B 合并为一个维度
+
+        # 修改此部分代码，确保形状适配
         q_conv_out = self.q_conv(x_for_qkv)
         q_conv_out = self.q_bn(q_conv_out).reshape(T, B, C, H, W).contiguous()
         q_conv_out = self.q_lif(q_conv_out)
 
+        # 替换 q_conv_out.flatten(3) 的部分，确保形状适配
+        # print("q_conv_out shape before flatten: ", q_conv_out.shape)  # 调试信息，查看形状
+
+        # 这里用 .view() 方法调整形状，确保与后续操作的要求匹配
+        # 如果期望形状是 [T * B, C, H, W]，可以这样写：
+        q_conv_out = q_conv_out.view(T * B, C, H, W)  # 根据需求调整
+
+        # 确保维度匹配后再进行 TIM 操作
+        q_conv_out = self.TIM(q_conv_out.view(T, B, -1, H, W))  # 重新调整为适应 TIM 的输入维度
+
         if hook is not None:
             hook[self._get_name() + str(self.layer) + "_q_lif"] = q_conv_out.detach()
+
         q = (
             q_conv_out.flatten(3)
             .transpose(-1, -2)

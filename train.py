@@ -45,6 +45,8 @@ from timm.scheduler import create_scheduler
 from timm.utils import ApexScaler, NativeScaler
 import model, dvs_utils, criterion
 
+from model.TIM import TIM
+
 try:
     from apex import amp
     from apex.parallel import DistributedDataParallel as ApexDDP
@@ -121,7 +123,7 @@ config_parser = parser = argparse.ArgumentParser(
 parser.add_argument(
     "-c",
     "--config",
-    default="imagenet.yml",
+    default = None,
     type=str,
     metavar="FILE",
     help="YAML config file specifying default arguments",
@@ -133,14 +135,14 @@ parser = argparse.ArgumentParser(description="PyTorch ImageNet Training")
 parser.add_argument(
     "-data-dir",
     metavar="DIR",
-    default="",
+    default="data/CIFAR10DVS",
     help="path to dataset",
 )
 parser.add_argument(
     "--dataset",
     "-d",
     metavar="NAME",
-    default="torch/cifar10",
+    default="cifar10-dvs",
     help="dataset type (default: ImageFolder/ImageTar if empty)",
 )
 parser.add_argument(
@@ -207,7 +209,7 @@ parser.add_argument(
 )
 parser.add_argument(
     "--in-channels",
-    default=3,
+    default=2,
     type=int,
     help="",
 )
@@ -217,13 +219,17 @@ parser.add_argument(
     default=False,
     help="Start with pretrained version of specified network (if avail)",
 )
+
+# 初始模型
 parser.add_argument(
     "--initial-checkpoint",
-    default="",
+    default=None,
     type=str,
     metavar="PATH",
     help="Initialize model from this checkpoint (default: none)",
 )
+
+# 模型加载
 parser.add_argument(
     "--resume",
     default="",
@@ -231,6 +237,9 @@ parser.add_argument(
     metavar="PATH",
     help="Resume full model and optimizer state from checkpoint (default: none)",
 )
+
+
+
 parser.add_argument(
     "--no-resume-opt",
     action="store_true",
@@ -278,7 +287,7 @@ parser.add_argument(
 parser.add_argument(
     "--img-size",
     type=int,
-    default=None,
+    default=128,
     metavar="N",
     help="Image patch size (default: None => model default)",
 )
@@ -320,6 +329,8 @@ parser.add_argument(
     metavar="NAME",
     help="Image resize interpolation type (overrides model)",
 )
+
+
 parser.add_argument(
     "-b",
     "--batch-size",
@@ -332,10 +343,12 @@ parser.add_argument(
     "-vb",
     "--val-batch-size",
     type=int,
-    default=16,
+    default=32,
     metavar="N",
     help="input val batch size for training (default: 32)",
 )
+
+
 
 # Optimizer parameters
 parser.add_argument(
@@ -816,7 +829,7 @@ parser.add_argument(
 )
 parser.add_argument(
     "--output",
-    default="",
+    default="./output",
     type=str,
     metavar="PATH",
     help="path to output folder (default: none, current dir)",
@@ -861,6 +874,29 @@ parser.add_argument(
     default=False,
     help="log training and validation metrics to wandb",
 )
+parser.add_argument(
+    "--use-tim",
+    action="store_true",
+    default=False,
+    help="Use TIM module"
+)
+
+parser.add_argument(
+    "--tim-alpha",
+    type=float,
+    default=0.5,
+    help="Alpha for TIM module"
+)
+
+parser.add_argument(
+    "--dim",
+    type=int,
+    default=128,  # 根据模型需要设置默认值，例如 128
+    metavar="N",
+    help="Embedding dimension of the model (default: 128)",
+)
+
+
 
 _logger = logging.getLogger("train")
 stream_handler = logging.StreamHandler()
@@ -974,7 +1010,21 @@ def main():
         spike_mode=args.spike_mode,
         dvs_mode=args.dvs_mode,
         TET=args.TET,
+
+        TIM_alpha=0.5
     )
+
+    params_without_tim_alpha = [p for n, p in model.named_parameters() if n != "TIM.tim_alpha"]
+
+    optimizer = torch.optim.Adam(
+        [
+            {"params": params_without_tim_alpha},  # General model parameters excluding tim_alpha
+            {"params": model.TIM.tim_alpha, "lr": args.lr * 0.1}  # tim_alpha with its own learning rate
+        ],
+        lr=args.lr,
+        weight_decay=args.weight_decay
+    )
+
     if args.local_rank == 0:
         _logger.info(f"Creating model {args.model}")
         _logger.info(
@@ -1421,6 +1471,20 @@ def main():
                     "*** Best metric: {0} (epoch {1})".format(best_metric, best_epoch)
                 )
 
+            # After calling loss.backward()
+            if model.TIM.tim_alpha.grad is not None:
+                print(f"Gradient for tim_alpha: {model.TIM.tim_alpha.grad}")
+            else:
+                print("Gradient for tim_alpha is None. Check if it's properly connected to the loss.")
+
+            # 输出 TIM_alpha 的当前值
+            if hasattr(model, "TIM"):
+                print(f"Epoch {epoch + 1}/{num_epochs} - Current TIM_alpha: {model.TIM.tim_alpha.item():.4f}")
+            else:
+                print("TIM module not found in the model.")
+
+
+
     except KeyboardInterrupt:
         pass
     if best_metric is not None:
@@ -1428,21 +1492,21 @@ def main():
 
 
 def train_one_epoch(
-    epoch,
-    model,
-    loader,
-    optimizer,
-    loss_fn,
-    args,
-    lr_scheduler=None,
-    saver=None,
-    output_dir=None,
-    amp_autocast=suppress,
-    loss_scaler=None,
-    model_ema=None,
-    mixup_fn=None,
-    dvs_aug=None,
-    dvs_trival_aug=None,
+        epoch,
+        model,
+        loader,
+        optimizer,
+        loss_fn,
+        args,
+        lr_scheduler=None,
+        saver=None,
+        output_dir=None,
+        amp_autocast=suppress,
+        loss_scaler=None,
+        model_ema=None,
+        mixup_fn=None,
+        dvs_aug=None,
+        dvs_trival_aug=None,
 ):
     if args.mixup_off_epoch and epoch >= args.mixup_off_epoch:
         if args.prefetcher:
@@ -1465,10 +1529,12 @@ def train_one_epoch(
     end = time.time()
     last_idx = len(loader) - 1
     num_updates = epoch * len(loader)
+
     for batch_idx, (input, target) in enumerate(loader):
         last_batch = batch_idx == last_idx
         data_time_m.update(time.time() - end)
         input = input.float()
+
         if not args.prefetcher or args.dataset in dvs_utils.DVS_DATASET:
             if args.amp and not isinstance(input, torch.cuda.HalfTensor):
                 input = input.half()
@@ -1487,6 +1553,7 @@ def train_one_epoch(
         if args.channels_last:
             input = input.contiguous(memory_format=torch.channels_last)
 
+        # Use amp_autocast for mixed-precision training
         with amp_autocast():
             output = model(input)[0]
             if args.TET:
@@ -1495,12 +1562,18 @@ def train_one_epoch(
                 )
             else:
                 loss = loss_fn(output, target)
+
+            # Add a small regularization for tim_alpha to ensure its involvement
+            if hasattr(model, "TIM"):
+                loss = loss + 0.01 * torch.abs(model.TIM.tim_alpha)
+
         sample_number += input.shape[0]
         if not args.distributed:
             losses_m.update(loss.item(), input.size(0))
 
         optimizer.zero_grad()
         if loss_scaler is not None:
+            # Use loss_scaler to manage gradient scaling for mixed precision
             loss_scaler(
                 loss,
                 optimizer,
@@ -1512,7 +1585,7 @@ def train_one_epoch(
                 create_graph=second_order,
             )
         else:
-            # loss.backward()
+            # Standard backward pass
             loss.backward(create_graph=second_order)
             if args.clip_grad is not None:
                 dispatch_clip_grad(
@@ -1568,9 +1641,9 @@ def train_one_epoch(
                     )
 
         if (
-            saver is not None
-            and args.recovery_interval
-            and (last_batch or (batch_idx + 1) % args.recovery_interval == 0)
+                saver is not None
+                and args.recovery_interval
+                and (last_batch or (batch_idx + 1) % args.recovery_interval == 0)
         ):
             saver.save_recovery(epoch, batch_idx=batch_idx)
 
@@ -1578,12 +1651,13 @@ def train_one_epoch(
             lr_scheduler.step_update(num_updates=num_updates, metric=losses_m.avg)
 
         end = time.time()
-        # end for
 
     if hasattr(optimizer, "sync_lookahead"):
         optimizer.sync_lookahead()
+
     if args.local_rank == 0:
         _logger.info(f"samples / s = {sample_number / (time.time() - start_time): .3f}")
+
     return OrderedDict([("loss", losses_m.avg)])
 
 

@@ -10,7 +10,7 @@ from spikingjelly.clock_driven.neuron import (
     MultiStepParametricLIFNode,
 )
 from module import *
-
+from model.TIM import TIM
 
 class SpikeDrivenTransformer(nn.Module):
     def __init__(
@@ -41,6 +41,7 @@ class SpikeDrivenTransformer(nn.Module):
         cml=False,
         pretrained=False,
         pretrained_cfg=None,
+        TIM_alpha=0.5,
     ):
         super().__init__()
         self.num_classes = num_classes
@@ -49,6 +50,7 @@ class SpikeDrivenTransformer(nn.Module):
         self.T = T
         self.TET = TET
         self.dvs = dvs_mode
+        self.TIM = TIM(dim=embed_dims, TIM_alpha=TIM_alpha)
 
         dpr = [
             x.item() for x in torch.linspace(0, drop_path_rate, depths)
@@ -122,9 +124,12 @@ class SpikeDrivenTransformer(nn.Module):
         return x, hook
 
     def forward(self, x, hook=None):
-        if len(x.shape) < 5:
-            x = (x.unsqueeze(0)).repeat(self.T, 1, 1, 1, 1)
-        else:
+        if len(x.shape) == 4:
+            # Add temporal dimension if it's missing
+            x = x.unsqueeze(0)  # Adding temporal dimension T=1
+            x = x.repeat(self.T, 1, 1, 1, 1)
+        elif len(x.shape) == 5:
+            # If temporal dimension exists, just transpose
             x = x.transpose(0, 1).contiguous()
 
         x, hook = self.forward_features(x, hook=hook)
