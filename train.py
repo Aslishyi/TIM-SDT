@@ -1498,9 +1498,9 @@ def train_one_epoch(
         amp_autocast=suppress,
         loss_scaler=None,
         model_ema=None,
-        mixup_fn=None,
-        dvs_aug=None,
-        dvs_trival_aug=None,
+        mixup_fn=True,
+        dvs_aug=True,
+        dvs_trival_aug=True,
 ):
     if args.mixup_off_epoch and epoch >= args.mixup_off_epoch:
         if args.prefetcher:
