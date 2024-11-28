@@ -25,8 +25,9 @@ class TIM(BaseModule):
 
         # Define tim_alpha as a trainable parameter
         # Correct initialization of tim_alpha as a trainable parameter
-        self.tim_alpha = nn.Parameter(torch.tensor([TIM_alpha], dtype=torch.float32) + torch.rand(1) * 0.01,
-                                      requires_grad=True)
+        # self.tim_alpha = nn.Parameter(torch.tensor([TIM_alpha], dtype=torch.float32) + torch.rand(1) * 0.01,
+        #                               requires_grad=True)
+        self.tim_alpha = TIM_alpha
 
     def forward(self, x):
         self.reset()

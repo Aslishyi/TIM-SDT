@@ -1,5 +1,5 @@
 # Dataset / Model parameters
-data_dir: ./data/cifar10-dvs
+data_dir: ./data/CIFAR10DVS
 dataset: cifar10-dvs
 pretrained: False
 num_classes: 10

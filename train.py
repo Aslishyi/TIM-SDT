@@ -1016,14 +1016,14 @@ def main():
 
     params_without_tim_alpha = [p for n, p in model.named_parameters() if n != "TIM.tim_alpha"]
 
-    optimizer = torch.optim.Adam(
-        [
-            {"params": params_without_tim_alpha},  # General model parameters excluding tim_alpha
-            {"params": model.TIM.tim_alpha, "lr": args.lr * 0.1}  # tim_alpha with its own learning rate
-        ],
-        lr=args.lr,
-        weight_decay=args.weight_decay
-    )
+    # optimizer = torch.optim.Adam(
+    #     [
+    #         {"params": params_without_tim_alpha},  # General model parameters excluding tim_alpha
+    #         {"params": model.TIM.tim_alpha, "lr": args.lr * 0.1}  # tim_alpha with its own learning rate
+    #     ],
+    #     lr=args.lr,
+    #     weight_decay=args.weight_decay
+    # )
 
     if args.local_rank == 0:
         _logger.info(f"Creating model {args.model}")
@@ -1110,7 +1110,11 @@ def main():
         assert not args.sync_bn, "Cannot use SyncBatchNorm with torchscripted model"
         model = torch.jit.script(model)
 
-    optimizer = create_optimizer_v2(model, **optimizer_kwargs(cfg=args))
+    # 假设 L2 正则化的权重衰减为 1e-5
+    l2_weight_decay = 1e-5
+    # 将 L2 正则化加入优化器的参数
+    optimizer_kwargs_with_l2 = {**optimizer_kwargs(cfg=args), 'weight_decay': l2_weight_decay}
+    optimizer = create_optimizer_v2(model, **optimizer_kwargs_with_l2)
 
     # setup automatic mixed-precision (AMP) loss scaling and op casting
     amp_autocast = suppress  # do nothing
@@ -1471,17 +1475,7 @@ def main():
                     "*** Best metric: {0} (epoch {1})".format(best_metric, best_epoch)
                 )
 
-            # After calling loss.backward()
-            if model.TIM.tim_alpha.grad is not None:
-                print(f"Gradient for tim_alpha: {model.TIM.tim_alpha.grad}")
-            else:
-                print("Gradient for tim_alpha is None. Check if it's properly connected to the loss.")
 
-            # 输出 TIM_alpha 的当前值
-            if hasattr(model, "TIM"):
-                print(f"Epoch {epoch + 1}/{num_epochs} - Current TIM_alpha: {model.TIM.tim_alpha.item():.4f}")
-            else:
-                print("TIM module not found in the model.")
 
 
 
@@ -1563,9 +1557,9 @@ def train_one_epoch(
             else:
                 loss = loss_fn(output, target)
 
-            # Add a small regularization for tim_alpha to ensure its involvement
-            if hasattr(model, "TIM"):
-                loss = loss + 0.01 * torch.abs(model.TIM.tim_alpha)
+            # # Add a small regularization for tim_alpha to ensure its involvement
+            # if hasattr(model, "TIM"):
+            #     loss = loss + 0.01 * torch.abs(model.TIM.tim_alpha)
 
         sample_number += input.shape[0]
         if not args.distributed:

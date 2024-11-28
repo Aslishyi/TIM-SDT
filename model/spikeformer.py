@@ -42,6 +42,7 @@ class SpikeDrivenTransformer(nn.Module):
         pretrained=False,
         pretrained_cfg=None,
         TIM_alpha=0.5,
+        Dropout_prob=0.4
     ):
         super().__init__()
         self.num_classes = num_classes
@@ -64,6 +65,7 @@ class SpikeDrivenTransformer(nn.Module):
             embed_dims=embed_dims,
             pooling_stat=pooling_stat,
             spike_mode=spike_mode,
+            dropout_prob=Dropout_prob
         )
 
         blocks = nn.ModuleList(

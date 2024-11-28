@@ -6,7 +6,6 @@ from spikingjelly.clock_driven.neuron import (
 )
 from timm.models.layers import to_2tuple
 
-
 class MS_SPS(nn.Module):
     def __init__(
         self,
@@ -17,6 +16,7 @@ class MS_SPS(nn.Module):
         embed_dims=256,
         pooling_stat="1111",
         spike_mode="lif",
+        dropout_prob=0.4,  # 新增参数，用于控制Dropout的概率
     ):
         super().__init__()
         self.image_size = [img_size_h, img_size_w]
@@ -34,6 +34,7 @@ class MS_SPS(nn.Module):
             in_channels, embed_dims // 8, kernel_size=3, stride=1, padding=1, bias=False
         )
         self.proj_bn = nn.BatchNorm2d(embed_dims // 8)
+        self.dropout = nn.Dropout(p=dropout_prob)  # 添加Dropout层
         if spike_mode == "lif":
             self.proj_lif = MultiStepLIFNode(tau=2.0, detach_reset=True, backend="cupy")
         elif spike_mode == "plif":
@@ -119,6 +120,7 @@ class MS_SPS(nn.Module):
         x = self.proj_conv(x.flatten(0, 1))  # have some fire value
         x = self.proj_bn(x).reshape(T, B, -1, H // ratio, W // ratio).contiguous()
         x = self.proj_lif(x)
+        x = self.dropout(x)  # 在这里应用 Dropout
         if hook is not None:
             hook[self._get_name() + "_lif"] = x.detach()
         x = x.flatten(0, 1).contiguous()
@@ -129,6 +131,7 @@ class MS_SPS(nn.Module):
         x = self.proj_conv1(x)
         x = self.proj_bn1(x).reshape(T, B, -1, H // ratio, W // ratio).contiguous()
         x = self.proj_lif1(x)
+        x = self.dropout(x)  # 在这里应用 Dropout
         if hook is not None:
             hook[self._get_name() + "_lif1"] = x.detach()
         x = x.flatten(0, 1).contiguous()
@@ -139,6 +142,7 @@ class MS_SPS(nn.Module):
         x = self.proj_conv2(x)
         x = self.proj_bn2(x).reshape(T, B, -1, H // ratio, W // ratio).contiguous()
         x = self.proj_lif2(x)
+        x = self.dropout(x)  # 在这里应用 Dropout
         if hook is not None:
             hook[self._get_name() + "_lif2"] = x.detach()
         x = x.flatten(0, 1).contiguous()
@@ -148,17 +152,20 @@ class MS_SPS(nn.Module):
 
         x = self.proj_conv3(x)
         x = self.proj_bn3(x)
+        x = self.dropout(x)  # 在这里应用 Dropout
         if self.pooling_stat[3] == "1":
             x = self.maxpool3(x)
             ratio *= 2
 
         x_feat = x
         x = self.proj_lif3(x.reshape(T, B, -1, H // ratio, W // ratio).contiguous())
+        x = self.dropout(x)  # 在这里应用 Dropout
         if hook is not None:
             hook[self._get_name() + "_lif3"] = x.detach()
         x = x.flatten(0, 1).contiguous()
         x = self.rpe_conv(x)
         x = self.rpe_bn(x)
+        x = self.dropout(x)  # 在这里应用 Dropout
         x = (x + x_feat).reshape(T, B, -1, H // ratio, W // ratio).contiguous()
 
         H, W = H // self.patch_size[0], W // self.patch_size[1]
