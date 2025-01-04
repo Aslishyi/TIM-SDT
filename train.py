@@ -177,9 +177,10 @@ parser.add_argument(
     type=str,
     help="pooling layers in SPS moduls",
 )
+# 2.Use TET
 parser.add_argument(
     "--TET",
-    default=False,
+    default=True,
     type=bool,
     help="",
 )
@@ -461,7 +462,7 @@ parser.add_argument(
 parser.add_argument(
     "--epochs",
     type=int,
-    default=200,
+    default=300,
     metavar="N",
     help="number of epochs to train (default: 2)",
 )
@@ -602,16 +603,18 @@ parser.add_argument(
     default=False,
     help="Do not random erase first (clean) augmentation split",
 )
+
+# 数据增强部分参数
 parser.add_argument(
     "--mixup",
     type=float,
-    default=0.0,
+    default=0.2,
     help="mixup alpha, mixup enabled if > 0. (default: 0.)",
 )
 parser.add_argument(
     "--cutmix",
     type=float,
-    default=0.0,
+    default=0.2,
     help="cutmix alpha, cutmix enabled if > 0. (default: 0.)",
 )
 parser.add_argument(
@@ -655,6 +658,8 @@ parser.add_argument(
     default="random",
     help='Training interpolation (random, bilinear, bicubic default: "random")',
 )
+
+# dropout在这里是怎么用的？
 parser.add_argument(
     "--drop", type=float, default=0.0, metavar="PCT", help="Dropout rate (default: 0.)"
 )
@@ -721,10 +726,11 @@ parser.add_argument(
     help="",
 )
 # Model Exponential Moving Average
+# 3.Open EMA
 parser.add_argument(
     "--model-ema",
     action="store_true",
-    default=False,
+    default=True,
     help="Enable tracking moving average of model weights",
 )
 parser.add_argument(
@@ -779,6 +785,7 @@ parser.add_argument(
     default=False,
     help="save images of input bathes every log interval for debugging",
 )
+# 4.Close fp16(amp)
 parser.add_argument(
     "--amp",
     action="store_true",
@@ -877,14 +884,14 @@ parser.add_argument(
 parser.add_argument(
     "--use-tim",
     action="store_true",
-    default=False,
+    default=True,
     help="Use TIM module"
 )
 
 parser.add_argument(
     "--tim-alpha",
     type=float,
-    default=0.5,
+    default=0.6,
     help="Alpha for TIM module"
 )
 
@@ -1011,10 +1018,10 @@ def main():
         dvs_mode=args.dvs_mode,
         TET=args.TET,
 
-        TIM_alpha=0.5
+        TIM_alpha=0.6
     )
 
-    params_without_tim_alpha = [p for n, p in model.named_parameters() if n != "TIM.tim_alpha"]
+    # params_without_tim_alpha = [p for n, p in model.named_parameters() if n != "TIM.tim_alpha"]
 
     # optimizer = torch.optim.Adam(
     #     [
@@ -1111,10 +1118,13 @@ def main():
         model = torch.jit.script(model)
 
     # 假设 L2 正则化的权重衰减为 1e-5
-    l2_weight_decay = 1e-5
+    l2_weight_decay = 4e-6
     # 将 L2 正则化加入优化器的参数
     optimizer_kwargs_with_l2 = {**optimizer_kwargs(cfg=args), 'weight_decay': l2_weight_decay}
     optimizer = create_optimizer_v2(model, **optimizer_kwargs_with_l2)
+
+    # 用这个关闭自己添加的L2正则化
+    # optimizer = create_optimizer_v2(model, **optimizer_kwargs(cfg=args))
 
     # setup automatic mixed-precision (AMP) loss scaling and op casting
     amp_autocast = suppress  # do nothing
@@ -1253,6 +1263,8 @@ def main():
             # download=True,
         )
 
+
+    # 数据增强启动部分
     # setup mixup / cutmix
     collate_fn = None
     train_dvs_aug, train_dvs_trival_aug = None, None
@@ -1498,9 +1510,12 @@ def train_one_epoch(
         amp_autocast=suppress,
         loss_scaler=None,
         model_ema=None,
-        mixup_fn=True,
+
+        # 在这里开启了数据增强
+        mixup_fn=None,
+        # 1.Open the Cutout augment
         dvs_aug=True,
-        dvs_trival_aug=True,
+        dvs_trival_aug=None,
 ):
     if args.mixup_off_epoch and epoch >= args.mixup_off_epoch:
         if args.prefetcher:

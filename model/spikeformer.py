@@ -41,7 +41,7 @@ class SpikeDrivenTransformer(nn.Module):
         cml=False,
         pretrained=False,
         pretrained_cfg=None,
-        TIM_alpha=0.5,
+        TIM_alpha=0.6,
         Dropout_prob=0.4
     ):
         super().__init__()

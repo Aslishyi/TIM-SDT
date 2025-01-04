@@ -92,7 +92,7 @@ class MS_SSA_Conv(nn.Module):
         dvs=False,
         layer=0,
 
-        TIM_alpha=0.5 # 引入TIM参数
+        TIM_alpha=0.6  # 引入TIM参数
     ):
         super().__init__()
         assert (

@@ -23,12 +23,12 @@ mlp_ratio: 4
 hflip: 0.5
 
 # Model Exponential Moving Average
-model-ema: False
+model-ema: True
 model-ema-decay: 0.9998
 
 # Misc
 seed: 42
-amp: True
+amp: False
 channels-last: False
 batch_size: 32
 val_batch_size: 32
@@ -49,4 +49,4 @@ TET: True
 TET_means: 1.0
 TET_lamb: 0.001
 
-# python train.py -c "conf/cifar10-dvs/2_256_200E_t10_TET.yml" --model sdt --spike-mode lif
+# python train.py -c "./conf/cifar10-dvs/2_256_200E_t10_TET.yml" --model sdt --spike-mode lif
