@@ -177,10 +177,9 @@ parser.add_argument(
     type=str,
     help="pooling layers in SPS moduls",
 )
-# 2.Use TET
 parser.add_argument(
     "--TET",
-    default=True,
+    default=False,
     type=bool,
     help="",
 )
@@ -726,11 +725,10 @@ parser.add_argument(
     help="",
 )
 # Model Exponential Moving Average
-# 3.Open EMA
 parser.add_argument(
     "--model-ema",
     action="store_true",
-    default=True,
+    default=False,
     help="Enable tracking moving average of model weights",
 )
 parser.add_argument(
@@ -785,7 +783,6 @@ parser.add_argument(
     default=False,
     help="save images of input bathes every log interval for debugging",
 )
-# 4.Close fp16(amp)
 parser.add_argument(
     "--amp",
     action="store_true",
@@ -917,7 +914,7 @@ def _parse_args():
     # Do we have a config file to parse?
     args_config, remaining = config_parser.parse_known_args()
     if args_config.config:
-        with open(args_config.config, "r") as f:
+        with open(args_config.config, "r", encoding='utf-8') as f:
             cfg = yaml.safe_load(f)
             parser.set_defaults(**cfg)
 
@@ -1118,7 +1115,7 @@ def main():
         model = torch.jit.script(model)
 
     # 假设 L2 正则化的权重衰减为 1e-5
-    l2_weight_decay = 4e-6
+    l2_weight_decay = 3e-6
     # 将 L2 正则化加入优化器的参数
     optimizer_kwargs_with_l2 = {**optimizer_kwargs(cfg=args), 'weight_decay': l2_weight_decay}
     optimizer = create_optimizer_v2(model, **optimizer_kwargs_with_l2)
@@ -1264,7 +1261,6 @@ def main():
         )
 
 
-    # 数据增强启动部分
     # setup mixup / cutmix
     collate_fn = None
     train_dvs_aug, train_dvs_trival_aug = None, None
@@ -1512,10 +1508,9 @@ def train_one_epoch(
         model_ema=None,
 
         # 在这里开启了数据增强
-        mixup_fn=None,
-        # 1.Open the Cutout augment
+        mixup_fn=True,
         dvs_aug=True,
-        dvs_trival_aug=None,
+        dvs_trival_aug=True,
 ):
     if args.mixup_off_epoch and epoch >= args.mixup_off_epoch:
         if args.prefetcher:

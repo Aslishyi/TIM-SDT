@@ -1,5 +1,8 @@
 # Dataset / Model parameters
 data_dir: ./data/CIFAR10DVS
+# resume: ./checkpoint-249.pth.tar
+#initial-checkpoint: ./model_best.pth.tar
+#local_rank: 1
 dataset: cifar10-dvs
 pretrained: False
 num_classes: 10
@@ -16,27 +19,31 @@ train_interpolation: bicubic
 use_conv_as_linear: True
 pooling_stat: "0011"
 in_channels: 2
-time_steps: 10
-layer: 2
+time_steps: 16
+#layer: 2
+depths: 2  # 明确指定为整数，表示总层数
+sr_ratios: [1, 1]  # 与 depths=2 匹配
+
 dim: 256
 mlp_ratio: 4
 hflip: 0.5
 
 # Model Exponential Moving Average
-model-ema: True
+model-ema: False
 model-ema-decay: 0.9998
 
 # Misc
 seed: 42
-amp: False
+amp: True
 channels-last: False
-batch_size: 32
-val_batch_size: 32
+batch_size: 16
+val_batch_size: 24
 lr: 7.5e-3
 min_lr: 3e-4
 sched: cosine
+
 weight_decay: 1e-4
-epochs: 200
+epochs: 300
 cooldown_epochs: 10
 warmup_epochs: 10
 warmup_lr: 1e-3
@@ -50,3 +57,4 @@ TET_means: 1.0
 TET_lamb: 0.001
 
 # python train.py -c "./conf/cifar10-dvs/2_256_200E_t10_TET.yml" --model sdt --spike-mode lif
+# watch -n 1 nvidia-smi
