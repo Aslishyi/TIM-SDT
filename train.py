@@ -1031,13 +1031,13 @@ def main():
 
     if args.local_rank == 0:
         _logger.info(f"Creating model {args.model}")
-        _logger.info(
-            str(
-                torchinfo.summary(
-                    model, (2, args.in_channels, args.img_size, args.img_size)
-                )
-            )
-        )
+        # _logger.info(
+        #     str(
+        #         torchinfo.summary(
+        #             model, (2, args.in_channels, args.img_size, args.img_size)
+        #         )
+        #     )
+        # )
 
     if args.num_classes is None:
         assert hasattr(

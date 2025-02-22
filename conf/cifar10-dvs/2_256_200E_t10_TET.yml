@@ -21,8 +21,12 @@ pooling_stat: "0011"
 in_channels: 2
 time_steps: 16
 #layer: 2
-depths: 2  # 明确指定为整数，表示总层数
-sr_ratios: [1, 1]  # 与 depths=2 匹配
+#depths: 2  # 明确指定为整数，表示总层数
+#sr_ratios: [1, 1]  # 与 depths=2 匹配
+depths: 6  # 增加总层数，例如 6，分配到 3 个阶段，每阶段 2 层
+embed_dims: 256
+stage_dims: [64, 192, 256]  # 可选，手动指定每阶段维度
+sr_ratios: [1, 1, 1]  # 对应每个阶段的 DSSA 卷积步幅
 
 dim: 256
 mlp_ratio: 4

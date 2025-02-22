@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from braincog.model_zoo.base_module import BaseModule
 from utils.MyNode import MyNode
 
@@ -20,14 +19,16 @@ class TIM(BaseModule):
             bias=True,
         )
 
-        self.in_lif = MyNode(tau=2.0, v_threshold=0.3, layer_by_layer=False, step=1)
-        self.out_lif = MyNode(tau=2.0, v_threshold=0.5, layer_by_layer=False, step=1)
+        # 降低 LIF 阈值，确保激活
+        self.in_lif = MyNode(tau=2.0, v_threshold=0.1, layer_by_layer=False, step=1)
+        self.out_lif = MyNode(tau=2.0, v_threshold=0.2, layer_by_layer=False, step=1)
 
-        # Define tim_alpha as a trainable parameter
-        # Correct initialization of tim_alpha as a trainable parameter
-        # self.tim_alpha = nn.Parameter(torch.tensor([TIM_alpha], dtype=torch.float32) + torch.rand(1) * 0.01,
-        #                               requires_grad=True)
         self.tim_alpha = TIM_alpha
+
+        # 初始化 interactor 权重
+        nn.init.kaiming_normal_(self.interactor.weight, mode='fan_out', nonlinearity='relu')
+        if self.interactor.bias is not None:
+            nn.init.constant_(self.interactor.bias, 0)
 
     def forward(self, x):
         self.reset()
@@ -50,6 +51,9 @@ class TIM(BaseModule):
                 padding=2,
                 bias=True,
             ).to(x.device)
+            nn.init.kaiming_normal_(self.interactor.weight, mode='fan_out', nonlinearity='relu')
+            if self.interactor.bias is not None:
+                nn.init.constant_(self.interactor.bias, 0)
 
         output = []
         x_tim = torch.empty_like(x[0])
@@ -59,13 +63,12 @@ class TIM(BaseModule):
                 x_tim = x[i]
                 output.append(x_tim)
             else:
-                x_tim = self.interactor(x_tim.flatten(0, 1)).reshape(B, H, N, CoH).contiguous()
+                interactor_out = self.interactor(x_tim.flatten(0, 1))
+                x_tim = interactor_out.reshape(B, H, N, CoH).contiguous()
                 x_tim = self.in_lif(x_tim) * self.tim_alpha + x[i] * (1 - self.tim_alpha)
                 x_tim = self.out_lif(x_tim)
-                # Make sure to preserve the computation graph
-                x_tim = x_tim + 0  # A dummy operation to ensure `x_tim` stays connected to the graph
+                x_tim = x_tim + 0  # Preserve computation graph
                 output.append(x_tim)
 
         output = torch.stack(output)
         return output
-
